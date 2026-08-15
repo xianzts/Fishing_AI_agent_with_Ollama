@@ -5,9 +5,9 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 
 # load local model
 llm = ChatOllama(model="qwen2:7b",
-                base_url="http://127.0.0.1:11434",
-                temperature=0.7   # creation[0, 1]
-                )
+                 base_url="http://127.0.0.1:11434",
+                 temperature=0.7  # creation[0, 1]
+                 )
 
 # 对话prompt模板
 prompt = ChatPromptTemplate.from_messages([
@@ -29,6 +29,15 @@ def get_history(session_id: str):
 chat_chain = prompt | llm
 
 # 上下文记忆
+'''
+RunnableWithMessageHistory(
+    runnable: Runnable,
+    get_session_history: Callable[[str], BaseChatMessageHistory],
+    input_messages_key: str = "input",
+    history_messages_key: str = "history",
+    output_messages_key: Optional[str] = None,
+)
+'''
 memory = RunnableWithMessageHistory(
     chat_chain,
     get_history,
@@ -40,7 +49,7 @@ user = "Xianzts"
 
 
 def chat_interaction():
-    print("---本地钓鱼AI Agent终端交互系统（输入“exit”退出）---")
+    print("---本地钓鱼AI Agent终端交互系统（输入“exit”退出, 输入”clear“清除上下文记忆）---")
     while True:
         new_question = input("{}>".format(user))
 
@@ -48,10 +57,17 @@ def chat_interaction():
             print("See You Next Time!")
             break
 
+        if new_question.lower() == 'clear':
+            store.pop("session_001", None)
+            print("已清空上下文记忆！")
+            continue
+
         print("AI>", end="", flush=True)
         try:
-            # output with each line
-            for answer_line in memory.stream({"input": new_question}, config={"configurable": {"session_id": "session_001"}}):
+            # stream output with each line
+            memory_stream = memory.stream({"input": new_question},
+                                          config={"configurable": {"session_id": "session_001"}})
+            for answer_line in memory_stream:
                 content = answer_line.content
                 print(content, end="", flush=True)
 
