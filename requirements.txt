@@ -1,3 +1,11 @@
-langchain-core>=0.2.0
-langchain-ollama>=0.2.0
-langchain-community>=0.2.0
+# RAG基础框架
+langchain==0.2.17
+langchain-chroma==0.1.4
+langchain-text-splitters==0.2.4
+langchain-core==0.2.38
+langchain-ollama==0.2.3
+langchain-community==0.2.19
+
+# 文档解析支持 pdf / docx
+pypdf==4.3.1
+python-docx==1.1.2
