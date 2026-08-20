@@ -7,7 +7,7 @@ rag_env/
 .idea/
 *.iml
 
-# Chroma向量数据库【最重要！禁止上传】
+# Chroma向量数据库
 chroma_db/
 
 # Python缓存文件
