@@ -10,4 +10,11 @@ TOP_K = 3                       # 检索取出最相关3个片段
 
 SYSTEM_PROMPT = "你是专业技术助手，回答简洁清晰。"
 
-USER = "Xianzts"
+DB = {
+    "host": "127.0.0.1",
+    "port": 3306,
+    "user": "root",
+    "password": "123456",
+    "database": "fishing_agent_db",
+    "charset": "utf8mb4"
+}
