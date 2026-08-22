@@ -5,16 +5,17 @@ import config
 
 
 class UserAccount:
-    def __init__(self):
+    def __init__(self, log_callback=None):
         self.user_origin_password = ""
         self.user_name = 'unknown'
+        self.log = log_callback or print
 
     def db_conn(self):
         try:
             conn = pymysql.connect(**config.DB)
 
         except pymysql.err.OperationalError as e:
-            print(f"数据库连接失败: {e}")
+            self.log(f"数据库连接失败: {e}")
 
         return conn
 
@@ -30,7 +31,7 @@ class UserAccount:
                 conn.commit()
                 return True
             except pymysql.err.OperationalError as e:
-                print(f"账号注册失败: {e}")
+                self.log(f"账号注册失败: {e}")
                 return False
             finally:
                 cursor.close()
@@ -49,14 +50,18 @@ class UserAccount:
                 search_result = cursor.fetchone()
 
                 if search_result is None:
-                    print("该账号不存在！")
+                    self.log("该账号不存在！")
                     return False
                 else:
                     self.user_origin_password = search_result[0]
-                    return bcrypt.verify(password, self.user_origin_password)
+                    if bcrypt.verify(password, self.user_origin_password):
+                        self.log("{} 成功登录！".format(user_name))
+                        return True
+                    else:
+                        self.log("账号或密码错误，请重新输入！")
 
             except pymysql.err.OperationalError as e:
-                print(f"账号查询失败: {e}")
+                self.log(f"账号查询失败: {e}")
                 return False
             finally:
                 cursor.close()

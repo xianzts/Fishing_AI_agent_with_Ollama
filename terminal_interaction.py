@@ -12,15 +12,16 @@ def chat_interaction(rag, llm, account):
         user_name = input("请输入账号：")
         password = pwinput.pwinput("请输入密码：")
         if account.confirm(user_name, password):
-            print("{} 成功登录！".format(user_name))
             account.user_name = user_name
             break
-        else:
-            print("账号或密码错误，请重新输入！")
 
     print("---本地钓鱼AI Agent终端交互系统（输入“exit”退出, 输入”clear“清除上下文记忆）---")
     while True:
         new_question = input("{}>".format(account.user_name))
+
+        if len(new_question) == 0:
+            print("请输入问题！")
+            continue
 
         if new_question.lower() == 'exit':
             print("See You Next Time!")
@@ -34,7 +35,7 @@ def chat_interaction(rag, llm, account):
         print("AI>", end="", flush=True)
         try:
             # stream output with each line
-            answer_stream = llm.stream_answer(new_question, retriever)
+            answer_stream = llm.stream_answer(account.user_name, new_question, retriever)
             for answer_line in answer_stream:
                 content = answer_line.content
                 print(content, end="", flush=True)

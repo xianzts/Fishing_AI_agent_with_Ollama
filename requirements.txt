@@ -13,3 +13,4 @@ python-docx==1.1.2
 # 账密
 pwinput==1.0.3
 bcrypt==3.2.2
+pymysql

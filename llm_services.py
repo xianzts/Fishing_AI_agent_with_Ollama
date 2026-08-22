@@ -28,7 +28,7 @@ class LLMServices:
             history_messages_key="history"
         )
 
-    def stream_answer(self, question: str, retriever):
+    def stream_answer(self, user_name, question: str, retriever):
         # 检索知识库
         related_docs = retriever.invoke(question)
         context = "\n====\n".join([doc.page_content for doc in related_docs])
@@ -37,19 +37,20 @@ class LLMServices:
         prompt = f"""
     【知识库上下文】
     {context}
+    当前用户信息：{user_name}
 
     用户问题：{question}
-
-    请严格基于上面【知识库上下文】回答用户问题。
-    如果上下文没有相关信息，请直接回答："知识库未找到该内容"，不要编造信息。
+    
+    回答规则：
+    1. 如果参考知识库有相关内容，优先参考知识库；
+    2. 如果知识库没有信息，**去查看下方对话历史获取答案**（比如用户名字、刚刚聊过的话题）；
+    3. 用户问：知道我的名字吗？ 直接从【当前用户信息】或者对话历史读取名字，不要去知识库查找；
+    4. 只有知识库、对话历史两者完全没有相关信息，才说“这个问题我暂时不太清楚”；禁止输出“知识库未找到内容”这类话术。
     """
         resp = self.memory.stream({"input": prompt},
-                             config={"configurable": {"session_id": "session_001"}})
+                                  config={"configurable": {"session_id": config.LLM_SESSION_ID}})
 
         return resp
 
     def clear_history(self):
         self.chat_history.clear()
-
-
-
