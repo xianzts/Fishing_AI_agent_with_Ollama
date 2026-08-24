@@ -18,6 +18,9 @@
 # 版本v0.5
 添加账密系统，账户会连入数据库
 
+# 版本v0.6
+添加jwt鉴权功能，生成access token
+
 # 环境安装
 请在 https://ollama.com/download 中下载ollama客户端
 
