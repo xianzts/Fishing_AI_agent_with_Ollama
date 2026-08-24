@@ -13,7 +13,6 @@ class UserAccount:
         self.user_origin_password = ""
         self.user_name = 'unknown'
         self.id = None
-        self.token = None
         self.log = log_callback or print
 
     def secret_generation(self):
@@ -31,9 +30,6 @@ class UserAccount:
         }
         token = jwt.encode(payload, config.JWT_SECRET_KEY, algorithm=config.JWT_ALGORITHM)
         return token
-
-    def jwt_get_token(self):
-        return self.token
 
     def verify_access_token(self, token: str):
         """
@@ -105,19 +101,20 @@ class UserAccount:
 
                 if search_result is None:
                     self.log("该账号不存在！")
-                    return False
+                    return None
                 else:
                     self.id, self.user_origin_password = search_result
                     if bcrypt.verify(password, self.user_origin_password):
                         self.log("{} 成功登录！".format(user_name))
-                        self.token = self.jwt_token_generation(self.id, self.user_name)
-                        return True
+                        token = self.jwt_token_generation(self.id, self.user_name)
+                        return {"access_token": token, "token_type": "bearer"}
                     else:
                         self.log("账号或密码错误，请重新输入！")
+                        return None
 
             except pymysql.err.OperationalError as e:
                 self.log(f"账号查询失败: {e}")
-                return False
+                return None
             finally:
                 cursor.close()
                 conn.close()

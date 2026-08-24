@@ -11,8 +11,10 @@ def chat_interaction(rag, llm, account):
     while True:
         user_name = input("请输入账号：")
         password = pwinput.pwinput("请输入密码：")
-        if account.confirm(user_name, password):
-            token = account.jwt_get_token()
+
+        token_details = account.confirm(user_name, password)
+        if token_details is not None:
+            token = token_details["access_token"]
             print("你的access token是：{}".format(token))
             print("token详细信息：{}".format(account.verify_access_token(token)))
             account.user_name = user_name
