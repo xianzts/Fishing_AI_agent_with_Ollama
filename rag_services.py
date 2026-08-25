@@ -52,8 +52,8 @@ class RagServices:
             db = Chroma(persist_directory=config.PERSIST_DIR, embedding_function=self.embedding)
 
         retriever = db.as_retriever(
-            search_kwargs={"k": config.TOP_K},
+            search_type=config.SEARCH_TYPE,
             score_threshold=config.THRESHOLD,
-            search_type=config.SEARCH_TYPE
+            search_kwargs={"k": config.TOP_K}
         )
         return retriever

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>SSE RAG测试</title>
+</head>
+<body>
+<div>
+    <h3>Token:</h3>
+    <textarea id="token" style="width:700px;height:60px;">在此粘贴登录获取的access_token</textarea>
+    <br>
+    <input id="question" type="text" placeholder="输入问题" value="介绍一下路亚钓法" style="width:600px;">
+    <button onclick="sendChat()">发送提问</button>
+    <div id="result" style="white-space:pre-wrap;margin-top:20px;border:1px solid #ccc;padding:10px;min-height:300px;"></div>
+</div>
+
+<script>
+async function sendChat(){
+    const token = document.getElementById('token').value.trim();
+    const question = document.getElementById('question').value.trim();
+    const resultDom = document.getElementById('result');
+    resultDom.innerText = "";
+
+    const resp = await fetch("http://127.0.0.1:8000/rag/chat?question="+encodeURIComponent(question),{
+        method:"POST",
+        headers:{
+            "Authorization":`Bearer ${token}`
+        }
+    });
+
+    if(!resp.ok){
+        if(resp.status === 401){
+            resultDom.innerText = "🔴认证失败：Token无效，请核对Token或者重新登录！";
+        }else{
+            resultDom.innerText = `🔴请求失败，状态码：${resp.status}`;
+        }
+        return;
+    }
+
+    // 读取SSE流
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+
+    while(true){
+        const {done,value} = await reader.read();
+        if(done) break;
+        buffer += decoder.decode(value);
+        // SSE按双换行分割消息
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop();
+        for(let p of parts){
+            if(!p.startsWith("data: ")) continue;
+            const jsonStr = p.substring(6);
+            const obj = JSON.parse(jsonStr);
+            if(obj.error){
+                resultDom.innerText += "\n错误："+obj.error;
+            }
+            if(obj.chunk === "[DONE]"){
+                return;
+            }
+            resultDom.innerText += obj.chunk;
+        }
+    }
+}
+</script>
+</body>
+</html>

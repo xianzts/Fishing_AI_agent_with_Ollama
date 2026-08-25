@@ -1,56 +1,72 @@
 from langchain_ollama import ChatOllama
-from langchain_community.chat_message_histories import ChatMessageHistory
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_core.messages import SystemMessage, HumanMessage
 
 import config
 
 
 class LLMServices:
     def __init__(self):
-        llm = ChatOllama(model=config.AGENT_MODEL,
-                         base_url=config.URL,
-                         temperature=config.TEMP
-                         )
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", config.SYSTEM_PROMPT),
-            MessagesPlaceholder(variable_name="history"),
-            ("human", "{input}")
-        ])
+        self.llm = ChatOllama(model=config.AGENT_MODEL,
+                              base_url=config.URL,
+                              temperature=config.TEMP
+                              )
 
-        self.chat_history = ChatMessageHistory()
-        self.chat_chain = prompt | llm
+        # 内存存储会话记忆 key:用户名，value 一轮轮对话列表
+        self.session_memory = {}
+        self.max_turn = config.MAX_TURN  # 最多保存最近6轮问答，防止prompt爆炸
 
-        self.memory = RunnableWithMessageHistory(
-            self.chat_chain,
-            lambda session_id: self.chat_history,
-            input_messages_key="input",
-            history_messages_key="history"
-        )
+    def route_question(self, question: str) -> bool:
+        """
+        返回 True=需要RAG检索；False=跳过RAG，只用记忆+模型知识
+        """
+        prompt_text = config.ROUTER_PROMPT.format(question=question)
+        resp = self.llm.invoke(prompt_text).content.strip()
+        if resp not in ("USE_RAG", "SKIP_RAG"):
+            return True
+        return resp == "USE_RAG"
+
+    def get_user_history(self, user_name: str) -> str:
+        """获取格式化后的历史对话字符串，填入Prompt"""
+        if user_name not in self.session_memory:
+            return "无历史对话"
+        turn_list = self.session_memory[user_name]
+        out = []
+        for human, ai in turn_list:
+            out.append(f"用户：{human}")
+            out.append(f"助手：{ai}")
+        return "\n".join(out)
+
+    def append_history(self, user_name: str, human_q: str, ai_a: str):
+        """完成一轮问答之后调用，把问答存入记忆，自动裁剪旧对话"""
+        if user_name not in self.session_memory:
+            self.session_memory[user_name] = []
+        self.session_memory[user_name].append((human_q, ai_a))
+        # 只保留最近N轮，删掉最旧的
+        if len(self.session_memory[user_name]) > self.max_turn:
+            self.session_memory[user_name].pop(0)
 
     def stream_answer(self, user_name, question: str, retriever):
-        # 检索知识库
-        related_docs = retriever.invoke(question)
-        context = "\n====\n".join([doc.page_content for doc in related_docs])
+        need_retrieve = self.route_question(question)
 
-        # RAG提示词：强制模型只能使用知识库上下文，抑制幻觉
-        prompt = f"""
-    【知识库上下文】
-    {context}
-    当前用户信息：{user_name}
+        context_text = ""
+        if need_retrieve:
+            good_docs = retriever.invoke(question)
+            context_text = "\n".join([d.page_content for d in good_docs])
 
-    用户问题：{question}
-    
-    回答规则：
-    1. 如果参考知识库有相关内容，优先参考知识库；
-    2. 如果知识库没有信息，**去查看下方对话历史获取答案**（比如用户名字、刚刚聊过的话题）；
-    3. 用户问：知道我的名字吗？ 直接从【当前用户信息】或者对话历史读取名字，不要去知识库查找；
-    4. 只有知识库、对话历史两者完全没有相关信息，才说“这个问题我暂时不太清楚”；禁止输出“知识库未找到内容”这类话术。
-    """
-        resp = self.memory.stream({"input": prompt},
-                                  config={"configurable": {"session_id": config.LLM_SESSION_ID}})
+        chat_history = self.get_user_history(user_name)
 
-        return resp
+        prompt = config.SYSTEM_PROMPT.format(
+            username=user_name,
+            context=context_text if context_text else "（没有知识库参考内容）",
+            history=chat_history
+        )
+
+        messages = [
+            SystemMessage(content=prompt),
+            HumanMessage(content=question)
+        ]
+        stream_generator = self.llm.stream(messages)
+        return stream_generator
 
     def clear_history(self):
         self.chat_history.clear()
