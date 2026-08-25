@@ -5,7 +5,7 @@ import jwt
 from datetime import datetime, timedelta, timezone
 from jwt.exceptions import ExpiredSignatureError, InvalidSignatureError, DecodeError
 
-import config
+from src import config
 
 
 class UserAccount:

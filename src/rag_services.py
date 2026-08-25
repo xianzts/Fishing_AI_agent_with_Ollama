@@ -5,7 +5,7 @@ from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, Te
 
 import os
 
-import config
+from src import config
 
 
 def load_documents(folder_path):

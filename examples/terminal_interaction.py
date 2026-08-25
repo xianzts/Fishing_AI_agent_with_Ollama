@@ -1,7 +1,8 @@
-import llm_services
-import user_account
-import config
 import pwinput
+
+import src.llm_services
+import src.user_account
+import src.config
 
 
 def chat_interaction(rag, llm, account):
