@@ -34,7 +34,7 @@ def chat_interaction(rag, llm, account):
             break
 
         if new_question.lower() == 'clear':
-            llm.clear_history(account.user_name)
+            llm.clear_history(account)
             print("已清空上下文记忆！")
             continue
 
@@ -42,7 +42,7 @@ def chat_interaction(rag, llm, account):
         try:
             # stream output with each line
             full_ai_response = ""
-            answer_stream = llm.stream_answer(account.user_name, new_question, retriever)
+            answer_stream = llm.stream_answer(account, new_question, retriever)
             for answer_line in answer_stream:
                 content = answer_line.content
                 full_ai_response += content
@@ -52,7 +52,7 @@ def chat_interaction(rag, llm, account):
             print("agent已生成完毕！")
             print("---------------")
 
-            llm.append_history(account.user_name, new_question, full_ai_response)
+            llm.append_history(account, new_question, full_ai_response)
 
         except Exception as err:
             print("\n执行异常，异常原因：{}".format(err))

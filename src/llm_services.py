@@ -2,8 +2,10 @@ from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage
 
 import logging
+import pymysql
 
 from src import config
+from src import user_account
 
 logger = logging.getLogger(__name__)   # 使用当前模块名创建 logger
 
@@ -30,27 +32,96 @@ class LLMServices:
             return True
         return resp == "USE_RAG"
 
-    def get_user_history(self, user_name: str) -> str:
+    def get_user_history(self, account) -> str:
         """获取格式化后的历史对话字符串，填入Prompt"""
-        if user_name not in self.session_memory:
-            return "无历史对话"
-        turn_list = self.session_memory[user_name]
-        out = []
-        for human, ai in turn_list:
-            out.append(f"用户：{human}")
-            out.append(f"助手：{ai}")
-        return "\n".join(out)
+        user_id = account.id
 
-    def append_history(self, user_name: str, human_q: str, ai_a: str):
+        # connect to db to load the record
+        self.log("正在连接数据库")
+        conn = account.db_conn()
+
+        cursor = None
+        try:
+            cursor = conn.cursor()
+            sql = "SELECT question, answer FROM user_record WHERE user_id = %s"
+            cursor.execute(sql, (user_id,))
+
+            search_result = cursor.fetchone()
+            if search_result is None:
+                return "无历史对话"
+
+            out = []
+            for i in range(len(search_result)):
+                if i % 2 == 0:
+                    out.append(f"用户：{search_result[i]}")
+                else:
+                    out.append(f"助手：{search_result[i]}")
+
+            self.log(f"加载用户上下文成功")
+            return "\n".join(out)
+
+        except pymysql.err.OperationalError as e:
+            self.log(f"加载用户上下文失败: {e}")
+            return None
+        except pymysql.MySQLError as e:
+            # 捕获其他未预料的数据库异常
+            self.log(f"数据库未知错误: {e}")
+            return None
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+
+    def append_history(self, account, human_q: str, ai_a: str):
         """完成一轮问答之后调用，把问答存入记忆，自动裁剪旧对话"""
-        if user_name not in self.session_memory:
-            self.session_memory[user_name] = []
-        self.session_memory[user_name].append((human_q, ai_a))
-        # 只保留最近N轮，删掉最旧的
-        if len(self.session_memory[user_name]) > self.max_turn:
-            self.session_memory[user_name].pop(0)
+        user_id = account.id
+        user_name = account.user_name
 
-    def stream_answer(self, user_name, question: str, retriever):
+        # connect to db to add the record
+        self.log("正在连接数据库")
+        conn = account.db_conn()
+
+        cursor = None
+        try:
+            cursor = conn.cursor()
+            sql = "INSERT INTO user_record (user_id, question, answer) VALUES (%s, %s, %s)"
+            cursor.execute(sql, (user_id, human_q, ai_a))
+
+            sql = "SELECT count(*) FROM user_record WHERE user_id = %s"
+            cursor.execute(sql, (user_id,))
+
+            search_result = cursor.fetchone()
+            record_count = search_result[0]
+
+            if record_count > config.MAX_TURN:
+                sql = "SELECT * FROM user_record WHERE user_id = %s ORDER BY create_time ASC LIMIT 1"
+                cursor.execute(sql, (user_id,))
+
+                search_result = cursor.fetchone()
+                record_id = search_result[0]
+
+                sql = "DELETE FROM user_record WHERE id = %s"
+                cursor.execute(sql, (record_id,))
+
+            conn.commit()
+
+            self.log(f"用户 {user_name} 对话保存成功")
+
+        except pymysql.err.OperationalError as e:
+            self.log(f"用户 {user_name} 对话保存失败: {e}")
+            return None
+        except pymysql.MySQLError as e:
+            # 捕获其他未预料的数据库异常
+            self.log(f"数据库未知错误: {e}")
+            return None
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+
+    def stream_answer(self, account, question: str, retriever):
         need_retrieve = self.route_question(question)
 
         context_text = ""
@@ -62,10 +133,10 @@ class LLMServices:
         else:
             self.log("问题：{}，不需要检索知识库".format(question))
 
-        chat_history = self.get_user_history(user_name)
+        chat_history = self.get_user_history(account)
 
         prompt = config.SYSTEM_PROMPT.format(
-            username=user_name,
+            username=account.user_name,
             context=context_text if context_text else config.NO_CONTENT,
             history=chat_history
         )
@@ -77,6 +148,30 @@ class LLMServices:
         stream_generator = self.llm.stream(messages)
         return stream_generator
 
-    def clear_history(self, user_name: str):
-        self.session_memory[user_name].clear()
-        self.log("上下文记忆清空成功")
+    def clear_history(self, account):
+        user_id = account.id
+
+        # connect to db to delete the record
+        self.log("正在连接数据库")
+        conn = account.db_conn()
+
+        cursor = None
+        try:
+            cursor = conn.cursor()
+            sql = "DELETE FROM user_record WHERE user_id = %s"
+            cursor.execute(sql, (user_id,))
+            conn.commit()
+            self.log(f"清除上下文成功")
+
+        except pymysql.err.OperationalError as e:
+            self.log(f"清除上下文失败: {e}")
+            return None
+        except pymysql.MySQLError as e:
+            # 捕获其他未预料的数据库异常
+            self.log(f"数据库未知错误: {e}")
+            return None
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()

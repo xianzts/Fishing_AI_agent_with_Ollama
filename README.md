@@ -21,6 +21,9 @@
 # 版本v0.6
 添加jwt鉴权功能，生成access token
 
+# 版本v0.7
+将上下文历史对话移动到数据库中，最多保存6条最近的记录
+
 # 环境安装
 请在 https://ollama.com/download 中下载ollama客户端
 

@@ -17,7 +17,7 @@ class UserAccount:
         self.user_origin_password = ""
         self.user_name = 'unknown'
         self.id = None
-        self.log = log_callback or print
+        self.log = log_callback or logger.info
 
     def secret_generation(self):
         # 生成64位长度，适配 HS256 / HS512 JWT算法
@@ -75,21 +75,36 @@ class UserAccount:
         return conn
 
     def register_account(self, user_name, password):
+        self.log("正在连接数据库")
         conn = self.db_conn()
-        if conn.open:
+        cursor = None
+        try:
             cursor = conn.cursor()
-            sql = "INSERT INTO account (username, pwd_hash) VALUES (%s, %s)"
             pwd_hash = bcrypt.hash(password)
-
-            try:
-                cursor.execute(sql, (user_name, pwd_hash))
-                conn.commit()
-                return True
-            except pymysql.err.OperationalError as e:
-                self.log(f"账号注册失败: {e}")
-                return False
-            finally:
+            sql = "INSERT INTO account (username, pwd_hash) VALUES (%s, %s)"
+            cursor.execute(sql, (user_name, pwd_hash))
+            conn.commit()
+            self.log(f"用户 {user_name} 注册成功")
+            return True
+        except pymysql.err.IntegrityError as e:
+            # 唯一键冲突（例如用户名已存在）
+            self.log(f"注册失败，用户名已存在: {user_name} - {e}")
+            conn.rollback()
+            return False
+        except pymysql.err.OperationalError as e:
+            # 连接问题、SQL执行错误等
+            self.log(f"数据库操作错误: {e}")
+            conn.rollback()
+            return False
+        except pymysql.MySQLError as e:
+            # 其他 MySQL 相关异常
+            self.log(f"数据库未知错误: {e}")
+            conn.rollback()
+            return False
+        finally:
+            if cursor:
                 cursor.close()
+            if conn:
                 conn.close()
 
     def confirm(self, user_name, password):
@@ -97,32 +112,42 @@ class UserAccount:
 
         self.log("正在连接数据库")
         conn = self.db_conn()
-        if conn.open:
+
+        cursor = None
+        try:
             cursor = conn.cursor()
             sql = "SELECT id, pwd_hash FROM account WHERE username = %s"
+            cursor.execute(sql, (user_name,))
+            search_result = cursor.fetchone()
 
-            try:
-                cursor.execute(sql, (user_name,))
-                search_result = cursor.fetchone()
+            if search_result is None:
+                self.log("账号或密码错误，请重新输入！")
+                return None
+            else:
+                self.id, self.user_origin_password = search_result
+                try:
+                    is_valid = bcrypt.verify(password, self.user_origin_password)
+                except ValueError as e:
+                    self.log(f"密码哈希校验失败: {e}")
+                    return None
 
-                if search_result is None:
+                if is_valid:
+                    self.log(f"{self.user_name} 成功登录！")
+                    token = self.jwt_token_generation(self.id, self.user_name)
+                    return {"access_token": token, "token_type": "bearer"}
+                else:
                     self.log("账号或密码错误，请重新输入！")
                     return None
-                else:
-                    self.id, self.user_origin_password = search_result
-                    if bcrypt.verify(password, self.user_origin_password):
-                        self.log("{} 成功登录！".format(user_name))
-                        token = self.jwt_token_generation(self.id, self.user_name)
-                        return {"access_token": token, "token_type": "bearer"}
-                    else:
-                        self.log("账号或密码错误，请重新输入！")
-                        return None
 
-            except pymysql.err.OperationalError as e:
-                self.log(f"账号查询失败: {e}")
-                return None
-            finally:
+        except pymysql.err.OperationalError as e:
+            self.log(f"账号查询失败: {e}")
+            return None
+        except pymysql.MySQLError as e:
+            # 捕获其他未预料的数据库异常
+            self.log(f"数据库未知错误: {e}")
+            return None
+        finally:
+            if cursor:
                 cursor.close()
+            if conn:
                 conn.close()
-
-
