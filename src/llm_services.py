@@ -1,11 +1,15 @@
 from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage
 
+import logging
+
 from src import config
+
+logger = logging.getLogger(__name__)   # 使用当前模块名创建 logger
 
 
 class LLMServices:
-    def __init__(self):
+    def __init__(self, log_callback=None):
         self.llm = ChatOllama(model=config.AGENT_MODEL,
                               base_url=config.URL,
                               temperature=config.TEMP
@@ -14,6 +18,7 @@ class LLMServices:
         # 内存存储会话记忆 key:用户名，value 一轮轮对话列表
         self.session_memory = {}
         self.max_turn = config.MAX_TURN  # 最多保存最近6轮问答，防止prompt爆炸
+        self.log = log_callback or logger.info
 
     def route_question(self, question: str) -> bool:
         """
@@ -50,14 +55,18 @@ class LLMServices:
 
         context_text = ""
         if need_retrieve:
+            self.log("问题：{}，需要检索知识库".format(question))
             good_docs = retriever.invoke(question)
             context_text = "\n".join([d.page_content for d in good_docs])
+            self.log("检索数量：{}".format(len(good_docs)))
+        else:
+            self.log("问题：{}，不需要检索知识库".format(question))
 
         chat_history = self.get_user_history(user_name)
 
         prompt = config.SYSTEM_PROMPT.format(
             username=user_name,
-            context=context_text if context_text else "（没有知识库参考内容）",
+            context=context_text if context_text else config.NO_CONTENT,
             history=chat_history
         )
 
@@ -68,5 +77,6 @@ class LLMServices:
         stream_generator = self.llm.stream(messages)
         return stream_generator
 
-    def clear_history(self):
-        self.chat_history.clear()
+    def clear_history(self, user_name: str):
+        self.session_memory[user_name].clear()
+        self.log("上下文记忆清空成功")

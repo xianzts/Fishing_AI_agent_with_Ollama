@@ -7,6 +7,10 @@ from jwt.exceptions import ExpiredSignatureError, InvalidSignatureError, DecodeE
 
 from src import config
 
+import logging
+
+logger = logging.getLogger(__name__)   # 使用当前模块名创建 logger
+
 
 class UserAccount:
     def __init__(self, log_callback=None):
@@ -63,6 +67,7 @@ class UserAccount:
     def db_conn(self):
         try:
             conn = pymysql.connect(**config.DB)
+            self.log("数据库连接成功")
 
         except pymysql.err.OperationalError as e:
             self.log(f"数据库连接失败: {e}")
@@ -90,6 +95,7 @@ class UserAccount:
     def confirm(self, user_name, password):
         self.user_name = user_name
 
+        self.log("正在连接数据库")
         conn = self.db_conn()
         if conn.open:
             cursor = conn.cursor()
@@ -100,7 +106,7 @@ class UserAccount:
                 search_result = cursor.fetchone()
 
                 if search_result is None:
-                    self.log("该账号不存在！")
+                    self.log("账号或密码错误，请重新输入！")
                     return None
                 else:
                     self.id, self.user_origin_password = search_result
