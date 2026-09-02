@@ -5,7 +5,6 @@ import logging
 import pymysql
 
 from src import config
-from src import user_account
 
 logger = logging.getLogger(__name__)   # 使用当前模块名创建 logger
 
@@ -22,6 +21,16 @@ class LLMServices:
         self.max_turn = config.MAX_TURN  # 最多保存最近6轮问答，防止prompt爆炸
         self.log = log_callback or logger.info
 
+    def db_conn(self):
+        try:
+            conn = pymysql.connect(**config.DB)
+            self.log("数据库连接成功")
+
+        except pymysql.err.OperationalError as e:
+            self.log(f"数据库连接失败: {e}")
+
+        return conn
+
     def route_question(self, question: str) -> bool:
         """
         返回 True=需要RAG检索；False=跳过RAG，只用记忆+模型知识
@@ -32,13 +41,12 @@ class LLMServices:
             return True
         return resp == "USE_RAG"
 
-    def get_user_history(self, account) -> str:
+    def get_user_history(self, user_id) -> str:
         """获取格式化后的历史对话字符串，填入Prompt"""
-        user_id = account.id
 
         # connect to db to load the record
         self.log("正在连接数据库")
-        conn = account.db_conn()
+        conn = self.db_conn()
 
         cursor = None
         try:
@@ -73,14 +81,11 @@ class LLMServices:
             if conn:
                 conn.close()
 
-    def append_history(self, account, human_q: str, ai_a: str):
+    def append_history(self, user_id, user_name, human_q: str, ai_a: str):
         """完成一轮问答之后调用，把问答存入记忆，自动裁剪旧对话"""
-        user_id = account.id
-        user_name = account.user_name
-
         # connect to db to add the record
         self.log("正在连接数据库")
-        conn = account.db_conn()
+        conn = self.db_conn()
 
         cursor = None
         try:
@@ -95,6 +100,7 @@ class LLMServices:
             record_count = search_result[0]
 
             if record_count > config.MAX_TURN:
+                self.log("已检测到超过{}条记录，正在删除旧纪录".format(config.MAX_TURN))
                 sql = "SELECT * FROM user_record WHERE user_id = %s ORDER BY create_time ASC LIMIT 1"
                 cursor.execute(sql, (user_id,))
 
@@ -103,6 +109,7 @@ class LLMServices:
 
                 sql = "DELETE FROM user_record WHERE id = %s"
                 cursor.execute(sql, (record_id,))
+                self.log("旧纪录删除成功")
 
             conn.commit()
 
@@ -121,22 +128,22 @@ class LLMServices:
             if conn:
                 conn.close()
 
-    def stream_answer(self, account, question: str, retriever):
+    def stream_answer(self, user_name, user_id, question: str, retriever):
         need_retrieve = self.route_question(question)
 
         context_text = ""
         if need_retrieve:
-            self.log("问题：{}，需要检索知识库".format(question))
+            self.log("问题：{} -> 需要检索知识库".format(question))
             good_docs = retriever.invoke(question)
             context_text = "\n".join([d.page_content for d in good_docs])
-            self.log("检索数量：{}".format(len(good_docs)))
+            self.log("知识库检索数量：{}".format(len(good_docs)))
         else:
-            self.log("问题：{}，不需要检索知识库".format(question))
+            self.log("问题：{} -> 不需要检索知识库".format(question))
 
-        chat_history = self.get_user_history(account)
+        chat_history = self.get_user_history(user_id)
 
         prompt = config.SYSTEM_PROMPT.format(
-            username=account.user_name,
+            username=user_name,
             context=context_text if context_text else config.NO_CONTENT,
             history=chat_history
         )
@@ -148,12 +155,10 @@ class LLMServices:
         stream_generator = self.llm.stream(messages)
         return stream_generator
 
-    def clear_history(self, account):
-        user_id = account.id
-
+    def clear_history(self, user_id):
         # connect to db to delete the record
         self.log("正在连接数据库")
-        conn = account.db_conn()
+        conn = self.db_conn()
 
         cursor = None
         try:

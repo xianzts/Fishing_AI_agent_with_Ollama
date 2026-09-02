@@ -4,6 +4,8 @@ import webbrowser
 from pathlib import Path
 import uvicorn
 
+import logging
+
 # ============ 配置区 ============
 HOST = "127.0.0.1"
 PORT = 8000
@@ -34,6 +36,11 @@ def run_uvicorn_server():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s"
+    )
+
     # 1. 启动uvicorn后台线程
     server_thread = threading.Thread(target=run_uvicorn_server, daemon=True)
     server_thread.start()

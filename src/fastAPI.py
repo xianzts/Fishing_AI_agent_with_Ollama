@@ -32,11 +32,10 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
     form_data.username 输入账号
     form_data.password 输入明文密码
     """
-    account_instance = UserAccount()
     username = form_data.username
     password = form_data.password
 
-    access_token_details = account_instance.confirm(username, password)
+    access_token_details = UserAccount().confirm(username, password)
     if access_token_details is None:
         raise HTTPException(status_code=401, detail="账号或密码错误")
 
@@ -45,8 +44,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 
 def get_current_user(token: str = Depends(oauth2_scheme)):
-    account_instance = UserAccount()
-    payload = account_instance.verify_access_token(token)
+    payload = UserAccount().verify_access_token(token)
     if payload is None:
         raise HTTPException(
             status_code=401,
@@ -68,22 +66,28 @@ def rag_query(
         current_user=Depends(get_current_user)
 ):
     LLM_instance = LLMServices()
-    username = current_user['username']
+
+    user_id = current_user["user_id"]
+    user_name = current_user['username']
 
     # SSE生成器闭包
     def sse_generator():
         try:
-            stream_iter = LLM_instance.stream_answer(username, question, global_retriever)
-            full_ai_response = ""  # 攒完整回答
-            for chunk in stream_iter:
-                content = chunk.content
-                full_ai_response += content
-                # SSE协议格式：data: json字符串\n\n，两个换行符是协议分隔符
-                yield f"data: {json.dumps({'chunk': content})}\n\n"
-            # 流结束标记
-            yield f"data: {json.dumps({'chunk': '[DONE]'})}\n\n"
-            # 全部流式结束，保存本轮问答到内存记忆
-            LLM_instance.append_history(username, question, full_ai_response)
+            if question == "clear":
+                LLM_instance.clear_history(user_id)
+                yield f"data: {json.dumps({'chunk': '所有历史对话记录删除完成'})}\n\n"
+            else:
+                stream_iter = LLM_instance.stream_answer(user_id, user_name, question, global_retriever)
+                full_ai_response = ""  # 攒完整回答
+                for chunk in stream_iter:
+                    content = chunk.content
+                    full_ai_response += content
+                    # SSE协议格式：data: json字符串\n\n，两个换行符是协议分隔符
+                    yield f"data: {json.dumps({'chunk': content})}\n\n"
+                # 流结束标记
+                yield f"data: {json.dumps({'chunk': '[DONE]'})}\n\n"
+                # 全部流式结束，保存本轮问答到内存记忆
+                LLM_instance.append_history(user_id, user_name, question, full_ai_response)
 
         except Exception as err:
             err_msg = str(err)
