@@ -8,7 +8,7 @@ import logging
 
 from src import config
 
-logger = logging.getLogger(__name__)   # 使用当前模块名创建 logger
+logger = logging.getLogger(__name__)  # 使用当前模块名创建 logger
 
 
 class RagServices:
@@ -63,3 +63,7 @@ class RagServices:
             search_kwargs={"k": config.TOP_K}
         )
         return retriever
+
+    # 添加用户个人私有知识库
+    def add_private_docs(self):
+        pass
