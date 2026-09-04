@@ -24,10 +24,11 @@ class UserAccount:
 
     def jwt_token_generation(self, user_id: int, username: str) -> str:
         """生成JWT token"""
-        expire = datetime.now(timezone.utc) + timedelta(seconds=config.ACCESS_TOKEN_EXPIRE_SECONDS)
+        expire = datetime.now(timezone.utc) + config.ACCESS_TOKEN_EXPIRES
         payload = {
-            "sub": str(user_id),
+            "user_id": str(user_id),
             "username": username,
+            "iat": datetime.now(timezone.utc),
             "exp": expire
         }
         token = jwt.encode(payload, config.JWT_SECRET_KEY, algorithm=config.JWT_ALGORITHM)
@@ -45,9 +46,12 @@ class UserAccount:
                 algorithms=[config.JWT_ALGORITHM],
                 options={"verify_exp": True}  # 开启过期校验
             )
+
             return {
-                "user_id": payload["sub"],
-                "username": payload["username"]
+                "user_id": payload["user_id"],
+                "username": payload["username"],
+                "issue_at": payload["iat"],
+                "expire": payload["exp"]
             }
         except ExpiredSignatureError:
             self.log("token已经过期")

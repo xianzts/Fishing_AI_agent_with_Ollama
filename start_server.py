@@ -12,7 +12,7 @@ PORT = 8000
 # FastAPI app 位置 src/fastAPI.py 的 app 对象
 FASTAPI_APP = "src.fastAPI:app"
 # 本地SSE测试html路径（assets文件夹）
-HTML_REL_PATH = r"assets/sse_test.html"
+HTML_REL_PATH = r"assets/agent_html_test.html"
 # 等待服务启动秒数
 WAIT_SEC = 2
 # ===============================
@@ -50,8 +50,8 @@ if __name__ == "__main__":
 
     # 2. 打开 Swagger UI 接口文档
     swagger_url = f"http://{HOST}:{PORT}/docs"
-    webbrowser.open(swagger_url)
-    print(f"🌐 已打开Swagger UI: {swagger_url}")
+    # webbrowser.open(swagger_url)
+    print(f"🌐 Swagger UI地址: {swagger_url}")
 
     # 3. 打开本地 sse_test.html
     html_file = ROOT_DIR / HTML_REL_PATH

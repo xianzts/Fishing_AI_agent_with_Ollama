@@ -1,13 +1,20 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Response
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import json
+import logging
+
+from datetime import datetime, timedelta, timezone
 
 from src.rag_services import RagServices
 from src.llm_services import LLMServices
 from src.user_account import UserAccount
 
+from src import config
+
+
+logger = logging.getLogger(__name__)
 app = FastAPI(title="Fishing agent")
 
 # 加上CORS配置，解决OPTIONS预检405
@@ -43,13 +50,35 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
     return {"access_token": access_token_details["access_token"], "token_type": "bearer"}
 
 
-def get_current_user(token: str = Depends(oauth2_scheme)):
+def get_current_user(token: str = Depends(oauth2_scheme), response: Response = None):
     payload = UserAccount().verify_access_token(token)
+
     if payload is None:
         raise HTTPException(
             status_code=401,
             detail="Token无效！请检查输入的token是否正确，或重新登录获取新token"
         )
+
+    current_time = datetime.now(timezone.utc)
+    exp_time = datetime.fromtimestamp(payload["expire"], tz=timezone.utc)
+    if exp_time - current_time < config.JWT_REFRESH_TOKEN_EXPIRES:
+        logger.info("token即将过期，正在刷新token")
+        new_token = UserAccount().jwt_token_generation(payload["user_id"], payload["username"])
+
+        # 把新 token 放入响应头
+        if response:
+            response.headers["X-New-Token"] = new_token
+            response.headers["Access-Control-Expose-Headers"] = "X-New-Token"
+            logger.info("新token已放入响应头")
+
+        new_payload = UserAccount().verify_access_token(new_token)
+        if new_payload is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Token刷新失败"
+            )
+        payload = new_payload
+
     return payload
 
 
@@ -57,7 +86,8 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
 @app.get("/me")
 def get_profile(current_user=Depends(get_current_user)):
     # current_user就是JWT解析出来的 {user_id:xxx, username:xxx}
-    return {"user_id": current_user["user_id"], "username": current_user["username"]}
+    return {"user_id": current_user["user_id"], "username": current_user["username"],
+            "issue_at": current_user["issue_at"], "expire": current_user["expire"]}
 
 
 @app.post("/rag/chat")

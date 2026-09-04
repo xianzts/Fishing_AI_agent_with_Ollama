@@ -7,6 +7,7 @@ import os
 import logging
 
 from src import config
+from src.db_services import DBServices
 
 logger = logging.getLogger(__name__)  # 使用当前模块名创建 logger
 
@@ -65,5 +66,9 @@ class RagServices:
         return retriever
 
     # 添加用户个人私有知识库
-    def add_private_docs(self):
-        pass
+    def add_private_docs(self, user_id, content: str):
+        db_instance = DBServices()
+        if db_instance.add_private_doc(user_id, content):
+            self.log("用户私有知识库添加成功！")
+        else:
+            self.log("用户私有知识库添加失败！")

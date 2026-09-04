@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -30,6 +31,10 @@ load_dotenv()
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM")
 ACCESS_TOKEN_EXPIRE_SECONDS = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES"))
+ACCESS_TOKEN_EXPIRES = timedelta(seconds=ACCESS_TOKEN_EXPIRE_SECONDS)
+JWT_REFRESH_TOKEN_EXPIRE_SECONDS = int(os.getenv("JWT_REFRESH_TOKEN_EXPIRES"))
+JWT_REFRESH_TOKEN_EXPIRES = timedelta(seconds=JWT_REFRESH_TOKEN_EXPIRE_SECONDS)
+
 
 # 数据库配置
 DB = {
