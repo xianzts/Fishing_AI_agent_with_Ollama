@@ -2,9 +2,9 @@ from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage
 
 import logging
-import pymysql
 
 from src import config
+from src.db_services import DBServices
 
 logger = logging.getLogger(__name__)   # 使用当前模块名创建 logger
 
@@ -21,16 +21,6 @@ class LLMServices:
         self.max_turn = config.MAX_TURN  # 最多保存最近6轮问答，防止prompt爆炸
         self.log = log_callback or logger.info
 
-    def db_conn(self):
-        try:
-            conn = pymysql.connect(**config.DB)
-            self.log("数据库连接成功")
-
-        except pymysql.err.OperationalError as e:
-            self.log(f"数据库连接失败: {e}")
-
-        return conn
-
     def route_question(self, question: str) -> bool:
         """
         返回 True=需要RAG检索；False=跳过RAG，只用记忆+模型知识
@@ -41,94 +31,44 @@ class LLMServices:
             return True
         return resp == "USE_RAG"
 
-    def get_user_history(self, user_id) -> str:
+    def get_user_history(self, user_id, user_name) -> str:
         """获取格式化后的历史对话字符串，填入Prompt"""
-
         # connect to db to load the record
-        self.log("正在连接数据库")
-        conn = self.db_conn()
+        db_instance = DBServices()
+        res = db_instance.get_recent_chat_records(user_id)
 
-        cursor = None
-        try:
-            cursor = conn.cursor()
-            sql = "SELECT question, answer FROM user_record WHERE user_id = %s"
-            cursor.execute(sql, (user_id,))
+        if not res["ok"]:
+            err_code = res["err_code"]
+            self.log(f"【警告】加载用户{user_name}对话历史失败，错误码:{err_code}")
+            # 业务策略：SSE流式场景不中断整个问答，向大模型传入系统警告文本
+            # 如果你希望异常直接中断请求，可以在这里raise异常交给上层路由处理
+            return "[系统警告：用户历史对话因数据库故障无法加载]"
 
-            search_result = cursor.fetchone()
-            if search_result is None:
-                return "无历史对话"
+        search_result = res["data"]
+        if len(search_result) == 0:
+            # ✅ 正常查询，但是确实没有历史对话
+            self.log(f"用户{user_name}暂无历史对话记录")
+            return "无历史对话"
 
-            out = []
-            for i in range(len(search_result)):
-                if i % 2 == 0:
-                    out.append(f"用户：{search_result[i]}")
-                else:
-                    out.append(f"助手：{search_result[i]}")
+        out = []
+        for question, answer in search_result:
+            out.append(f"用户：{question}")
+            out.append(f"助手：{answer}")
 
-            self.log(f"加载用户上下文成功")
-            return "\n".join(out)
-
-        except pymysql.err.OperationalError as e:
-            self.log(f"加载用户上下文失败: {e}")
-            return None
-        except pymysql.MySQLError as e:
-            # 捕获其他未预料的数据库异常
-            self.log(f"数据库未知错误: {e}")
-            return None
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+        self.log(f"加载用户{user_name}上下文成功，共{len(search_result)}轮对话")
+        return "\n".join(out)
 
     def append_history(self, user_id, user_name, human_q: str, ai_a: str):
         """完成一轮问答之后调用，把问答存入记忆，自动裁剪旧对话"""
-        # connect to db to add the record
-        self.log("正在连接数据库")
-        conn = self.db_conn()
+        self.log("正在保存当前对话QA")
+        db_instance = DBServices()
+        success = db_instance.add_chat_record_with_cleanup(user_id, human_q, ai_a)
+        if success:
+            self.log("对话历史更新成功")
+        else:
+            self.log("对话历史更新失败")
 
-        cursor = None
-        try:
-            cursor = conn.cursor()
-            sql = "INSERT INTO user_record (user_id, question, answer) VALUES (%s, %s, %s)"
-            cursor.execute(sql, (user_id, human_q, ai_a))
-
-            sql = "SELECT count(*) FROM user_record WHERE user_id = %s"
-            cursor.execute(sql, (user_id,))
-
-            search_result = cursor.fetchone()
-            record_count = search_result[0]
-
-            if record_count > config.MAX_TURN:
-                self.log("已检测到超过{}条记录，正在删除旧纪录".format(config.MAX_TURN))
-                sql = "SELECT * FROM user_record WHERE user_id = %s ORDER BY create_time ASC LIMIT 1"
-                cursor.execute(sql, (user_id,))
-
-                search_result = cursor.fetchone()
-                record_id = search_result[0]
-
-                sql = "DELETE FROM user_record WHERE id = %s"
-                cursor.execute(sql, (record_id,))
-                self.log("旧纪录删除成功")
-
-            conn.commit()
-
-            self.log(f"用户 {user_name} 对话保存成功")
-
-        except pymysql.err.OperationalError as e:
-            self.log(f"用户 {user_name} 对话保存失败: {e}")
-            return None
-        except pymysql.MySQLError as e:
-            # 捕获其他未预料的数据库异常
-            self.log(f"数据库未知错误: {e}")
-            return None
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
-
-    def stream_answer(self, user_name, user_id, question: str, retriever):
+    def stream_answer(self, user_id, user_name, question: str, retriever):
         need_retrieve = self.route_question(question)
 
         context_text = ""
@@ -140,7 +80,7 @@ class LLMServices:
         else:
             self.log("问题：{} -> 不需要检索知识库".format(question))
 
-        chat_history = self.get_user_history(user_id)
+        chat_history = self.get_user_history(user_id, user_name)
 
         prompt = config.SYSTEM_PROMPT.format(
             username=user_name,
@@ -157,26 +97,9 @@ class LLMServices:
 
     def clear_history(self, user_id):
         # connect to db to delete the record
-        self.log("正在连接数据库")
-        conn = self.db_conn()
-
-        cursor = None
-        try:
-            cursor = conn.cursor()
-            sql = "DELETE FROM user_record WHERE user_id = %s"
-            cursor.execute(sql, (user_id,))
-            conn.commit()
-            self.log(f"清除上下文成功")
-
-        except pymysql.err.OperationalError as e:
-            self.log(f"清除上下文失败: {e}")
-            return None
-        except pymysql.MySQLError as e:
-            # 捕获其他未预料的数据库异常
-            self.log(f"数据库未知错误: {e}")
-            return None
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+        db_instance = DBServices()
+        self.log("正在清理所有历史记录")
+        if db_instance.clean_records(user_id):
+            self.log("历史记录清理成功")
+        else:
+            self.log("历史记录清理失败")

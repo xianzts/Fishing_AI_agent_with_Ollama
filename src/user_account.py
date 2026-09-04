@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from jwt.exceptions import ExpiredSignatureError, InvalidSignatureError, DecodeError
 
 from src import config
+from src.db_services import DBServices
 
 import logging
 
@@ -61,88 +62,24 @@ class UserAccount:
             self.log(f"token校验异常: {e}")
             return None
 
-    def db_conn(self):
-        try:
-            conn = pymysql.connect(**config.DB)
-            self.log("数据库连接成功")
-
-        except pymysql.err.OperationalError as e:
-            self.log(f"数据库连接失败: {e}")
-
-        return conn
-
-    def register_account(self, user_name, password):
-        self.log("正在连接数据库")
-        conn = self.db_conn()
-        cursor = None
-        try:
-            cursor = conn.cursor()
-            pwd_hash = bcrypt.hash(password)
-            sql = "INSERT INTO account (username, pwd_hash) VALUES (%s, %s)"
-            cursor.execute(sql, (user_name, pwd_hash))
-            conn.commit()
-            self.log(f"用户 {user_name} 注册成功")
-            return True
-        except pymysql.err.IntegrityError as e:
-            # 唯一键冲突（例如用户名已存在）
-            self.log(f"注册失败，用户名已存在: {user_name} - {e}")
-            conn.rollback()
-            return False
-        except pymysql.err.OperationalError as e:
-            # 连接问题、SQL执行错误等
-            self.log(f"数据库操作错误: {e}")
-            conn.rollback()
-            return False
-        except pymysql.MySQLError as e:
-            # 其他 MySQL 相关异常
-            self.log(f"数据库未知错误: {e}")
-            conn.rollback()
-            return False
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
-
     def confirm(self, user_name, password):
-        self.log("正在连接数据库")
-        conn = self.db_conn()
+        db_instance = DBServices()
+        search_result = db_instance.search_account_with_pwd(user_name)
+        if search_result is None:
+            self.log("账号或密码错误，请重新输入！")
+            return None
 
-        cursor = None
+        user_id, user_origin_password = search_result
         try:
-            cursor = conn.cursor()
-            sql = "SELECT id, pwd_hash FROM account WHERE username = %s"
-            cursor.execute(sql, (user_name,))
-            search_result = cursor.fetchone()
-
-            if search_result is None:
-                self.log("账号或密码错误，请重新输入！")
-                return None
-            else:
-                user_id, user_origin_password = search_result
-                try:
-                    is_valid = bcrypt.verify(password, user_origin_password)
-                except ValueError as e:
-                    self.log(f"密码哈希校验失败: {e}")
-                    return None
-
-                if is_valid:
-                    self.log(f"{user_name} 成功登录！")
-                    token = self.jwt_token_generation(user_id, user_name)
-                    return {"access_token": token, "token_type": "bearer"}
-                else:
-                    self.log("账号或密码错误，请重新输入！")
-                    return None
-
-        except pymysql.err.OperationalError as e:
-            self.log(f"账号查询失败: {e}")
+            is_valid = bcrypt.verify(password, user_origin_password)
+        except ValueError as e:
+            self.log(f"密码哈希校验失败: {e}")
             return None
-        except pymysql.MySQLError as e:
-            # 捕获其他未预料的数据库异常
-            self.log(f"数据库未知错误: {e}")
+
+        if is_valid:
+            self.log(f"{user_name} 成功登录！")
+            token = self.jwt_token_generation(user_id, user_name)
+            return {"access_token": token, "token_type": "bearer"}
+        else:
+            self.log("账号或密码错误，请重新输入！")
             return None
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
