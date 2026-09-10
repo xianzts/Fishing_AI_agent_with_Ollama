@@ -8,7 +8,7 @@ EMBEDDING_MODEL = "nomic-embed-text"
 URL = "http://127.0.0.1:11434"
 TEMP = 0.2
 
-BASE_DIR = Path(__file__).parent.parent
+BASE_DIR = Path(__file__).parent.parent.parent
 DOC_FOLDER = BASE_DIR / "assets" / "docs"  # 存放你的知识库文档目录
 PERSIST_DIR = BASE_DIR / "data" / "chroma_db"  # 向量库持久化保存的本地文件夹
 

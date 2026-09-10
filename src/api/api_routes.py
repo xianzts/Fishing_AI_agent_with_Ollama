@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,24 +7,14 @@ import logging
 
 from datetime import datetime, timedelta, timezone
 
-from src.rag_services import RagServices
-from src.llm_services import LLMServices
-from src.user_account import UserAccount
+from src.services.rag_services import RagServices
+from src.services.llm_services import LLMServices
+from src.services.user_account import UserAccount
 
-from src import config
-
+from src.core.security import Security
+from src.core import config
 
 logger = logging.getLogger(__name__)
-app = FastAPI(title="Fishing agent")
-
-# 加上CORS配置，解决OPTIONS预检405
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],        # 开发环境，允许全部来源；生产不要用*
-    allow_credentials=True,
-    allow_methods=["*"],         # 允许OPTIONS、POST等全部method
-    allow_headers=["*"],
-)
 
 # =========全局：服务启动一次性加载向量库，仅执行一次=========
 rag_service = RagServices()
@@ -32,8 +22,11 @@ global_retriever = rag_service.load_vector_dataset()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 
+# 创建一个 router 实例
+router = APIRouter()
 
-@app.post("/login")
+
+@router.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
     """
     form_data.username 输入账号
@@ -51,7 +44,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 
 def get_current_user(token: str = Depends(oauth2_scheme), response: Response = None):
-    payload = UserAccount().verify_access_token(token)
+    payload = Security().verify_access_token(token)
 
     if payload is None:
         raise HTTPException(
@@ -63,7 +56,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), response: Response = N
     exp_time = datetime.fromtimestamp(payload["expire"], tz=timezone.utc)
     if exp_time - current_time < config.JWT_REFRESH_TOKEN_EXPIRES:
         logger.info("token即将过期，正在刷新token")
-        new_token = UserAccount().jwt_token_generation(payload["user_id"], payload["username"])
+        new_token = Security().jwt_token_generation(payload["user_id"], payload["username"])
 
         # 把新 token 放入响应头
         if response:
@@ -71,7 +64,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), response: Response = N
             response.headers["Access-Control-Expose-Headers"] = "X-New-Token"
             logger.info("新token已放入响应头")
 
-        new_payload = UserAccount().verify_access_token(new_token)
+        new_payload = Security().verify_access_token(new_token)
         if new_payload is None:
             raise HTTPException(
                 status_code=401,
@@ -83,14 +76,14 @@ def get_current_user(token: str = Depends(oauth2_scheme), response: Response = N
 
 
 # =========受保护接口示例：访问个人信息，必须携带token=========
-@app.get("/me")
+@router.get("/me")
 def get_profile(current_user=Depends(get_current_user)):
     # current_user就是JWT解析出来的 {user_id:xxx, username:xxx}
     return {"user_id": current_user["user_id"], "username": current_user["username"],
             "issue_at": current_user["issue_at"], "expire": current_user["expire"]}
 
 
-@app.post("/rag/chat")
+@router.post("/rag/chat")
 def rag_query(
         question: str,
         current_user=Depends(get_current_user)

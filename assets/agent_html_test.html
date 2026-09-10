@@ -115,6 +115,18 @@
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
+        function isTokenExpired(token) {
+            try {
+                // JWT 格式：header.payload.signature，payload 是 Base64Url 编码的 JSON
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                if (!payload.exp) return true;          // 没有 exp 字段视为过期
+                const expTime = payload.exp * 1000;     // exp 单位是秒，转换为毫秒
+                return Date.now() >= expTime;           // 当前时间大于等于过期时间则已过期
+            } catch (e) {
+                return true;   // 解析失败也视为无效 token
+            }
+        }
+
         // ==================== 登录 ====================
         async function login() {
             const username = document.getElementById('username').value.trim();
@@ -288,11 +300,13 @@
         // ==================== 初始化 ====================
         window.addEventListener('DOMContentLoaded', () => {
             const token = getToken();
-            const savedUsername = localStorage.getItem('username') || '';
-            if (token) {
+            if (token && !isTokenExpired(token)) {
+                const savedUsername = localStorage.getItem('username') || '';
                 showChatPanel();
                 addMessage('assistant', `欢迎回来，${savedUsername}！`);
             } else {
+                clearToken();
+                localStorage.removeItem('username');
                 showLoginPanel();
             }
         });

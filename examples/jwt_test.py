@@ -4,9 +4,9 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import json
 
-from src.rag_services import RagServices
-from src.llm_services import LLMServices
-from src.user_account import UserAccount
+from src import RagServices
+from src import LLMServices
+from src import UserAccount
 
 app = FastAPI(title="Fishing agent")
 

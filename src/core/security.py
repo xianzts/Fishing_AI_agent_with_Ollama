@@ -1,21 +1,23 @@
 from passlib.hash import bcrypt
-import pymysql
 import secrets
+import logging
 import jwt
 from datetime import datetime, timedelta, timezone
 from jwt.exceptions import ExpiredSignatureError, InvalidSignatureError, DecodeError
 
-from src import config
-from src.db_services import DBServices
+from src.core import config
 
-import logging
-
-logger = logging.getLogger(__name__)   # 使用当前模块名创建 logger
+logger = logging.getLogger(__name__)  # 使用当前模块名创建 logger
 
 
-class UserAccount:
+class Security:
     def __init__(self, log_callback=None):
         self.log = log_callback or logger.info
+
+    def verify_user_password(self, password, user_origin_password):
+        is_valid = bcrypt.verify(password, user_origin_password)
+        self.log("密码校验完成")
+        return is_valid
 
     def secret_generation(self):
         # 生成64位长度，适配 HS256 / HS512 JWT算法
@@ -66,24 +68,5 @@ class UserAccount:
             self.log(f"token校验异常: {e}")
             return None
 
-    def confirm(self, user_name, password):
-        db_instance = DBServices()
-        search_result = db_instance.search_account_with_pwd(user_name)
-        if search_result is None:
-            self.log("账号或密码错误，请重新输入！")
-            return None
 
-        user_id, user_origin_password = search_result
-        try:
-            is_valid = bcrypt.verify(password, user_origin_password)
-        except ValueError as e:
-            self.log(f"密码哈希校验失败: {e}")
-            return None
 
-        if is_valid:
-            self.log(f"{user_name} 成功登录！")
-            token = self.jwt_token_generation(user_id, user_name)
-            return {"access_token": token, "token_type": "bearer"}
-        else:
-            self.log("账号或密码错误，请重新输入！")
-            return None

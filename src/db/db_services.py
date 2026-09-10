@@ -4,7 +4,7 @@ import logging
 from passlib.hash import bcrypt
 from contextlib import contextmanager
 
-from src import config
+from src.core import config
 
 logger = logging.getLogger(__name__)  # 使用当前模块名创建 logger
 

@@ -3,8 +3,8 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 import logging
 
-from src import config
-from src.db_services import DBServices
+from src.core import config
+from src.db.db_services import DBServices
 
 logger = logging.getLogger(__name__)  # 使用当前模块名创建 logger
 

@@ -1,0 +1,1 @@
+# Interface Layer: Handles HTTP requests and responses

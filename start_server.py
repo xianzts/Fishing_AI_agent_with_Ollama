@@ -9,8 +9,8 @@ import logging
 # ============ 配置区 ============
 HOST = "127.0.0.1"
 PORT = 8000
-# FastAPI app 位置 src/fastAPI.py 的 app 对象
-FASTAPI_APP = "src.fastAPI:app"
+# FastAPI app 位置 src/api_routes.py 的 app 对象
+FASTAPI_APP = "src.main:app"
 # 本地SSE测试html路径（assets文件夹）
 HTML_REL_PATH = r"assets/agent_html_test.html"
 # 等待服务启动秒数

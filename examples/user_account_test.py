@@ -1,4 +1,4 @@
-from src.user_account import UserAccount
+from src import UserAccount
 
 import logging
 

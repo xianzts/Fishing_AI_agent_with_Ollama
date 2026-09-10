@@ -1,4 +1,4 @@
-from src.rag_services import RagServices
+from src import RagServices
 import logging
 
 if __name__ == "__main__":

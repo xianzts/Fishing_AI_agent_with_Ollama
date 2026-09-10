@@ -1,6 +1,6 @@
-from src.rag_services import RagServices
-from src.llm_services import LLMServices
-from src.user_account import UserAccount
+from src import RagServices
+from src import LLMServices
+from src import UserAccount
 from terminal_interaction import chat_interaction
 
 import logging
