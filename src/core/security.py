@@ -13,6 +13,15 @@ logger = logging.getLogger(__name__)  # 使用当前模块名创建 logger
 class Security:
     def __init__(self, log_callback=None):
         self.log = log_callback or logger.info
+        self.DUMMY_HASH = bcrypt.hash(b"dummy_password_for_timing_xianztsying")
+
+    def get_hash_pwd(self, password: str):
+        try:
+            hash_pwd = bcrypt.hash(password)
+            self.log("密码哈希成功")
+        except Exception as e:
+            self.log(f"密码哈希失败: {e}")
+        return hash_pwd
 
     def verify_user_password(self, password, user_origin_password):
         is_valid = bcrypt.verify(password, user_origin_password)

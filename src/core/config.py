@@ -8,6 +8,7 @@ EMBEDDING_MODEL = "nomic-embed-text"
 URL = "http://127.0.0.1:11434"
 TEMP = 0.2
 
+# RAG配置
 BASE_DIR = Path(__file__).parent.parent.parent
 DOC_FOLDER = BASE_DIR / "assets" / "docs"  # 存放你的知识库文档目录
 PERSIST_DIR = BASE_DIR / "data" / "chroma_db"  # 向量库持久化保存的本地文件夹
@@ -28,6 +29,11 @@ LLM_SESSION_ID = "session_001"
 
 # 读取env配置
 load_dotenv()
+
+# 用户配置
+# 登录安全
+MAX_FAILED_ATTEMPTS = int(os.getenv("MAX_FAILED_ATTEMPTS"))        # 连续失败多少次后锁定
+LOCK_DURATION_MINUTES = int(os.getenv("LOCK_DURATION_MINUTES"))     # 锁定时长（分钟）
 
 # 加载JWT配置
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")

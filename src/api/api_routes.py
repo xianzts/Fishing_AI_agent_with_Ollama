@@ -35,9 +35,16 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
     username = form_data.username
     password = form_data.password
 
-    access_token_details = UserAccount().confirm(username, password)
+    access_token_details, info = UserAccount().confirm(username, password)
     if access_token_details is None:
-        raise HTTPException(status_code=401, detail="账号或密码错误")
+        if info is None:
+            detail = "密码哈希校验错误，请重试"
+        else:
+            if info["locked"]:
+                detail = "您已输入错误密码超过5次，账号已锁定，请15分钟后再试"
+            else:
+                detail = f"账号或密码错误，你还可以输入 {info['remaining']} 次"
+        raise HTTPException(status_code=401, detail=detail)
 
     # 必须返回这个固定结构！
     return {"access_token": access_token_details["access_token"], "token_type": "bearer"}

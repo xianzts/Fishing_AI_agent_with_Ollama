@@ -1,10 +1,10 @@
 import pymysql
 import re
 import logging
-from passlib.hash import bcrypt
 from contextlib import contextmanager
 
 from src.core import config
+from src.core.security import Security
 
 logger = logging.getLogger(__name__)  # 使用当前模块名创建 logger
 
@@ -101,7 +101,7 @@ class DBServices:
     def register_account(self, user_name, password):
         try:
             with self.get_cursor() as (cursor, conn):
-                pwd_hash = bcrypt.hash(password)
+                pwd_hash = Security().get_hash_pwd(password)
                 sql = "INSERT INTO account (username, pwd_hash) VALUES (%s, %s)"
                 cursor.execute(sql, (user_name, pwd_hash))
 
@@ -123,11 +123,11 @@ class DBServices:
     def search_account_with_pwd(self, user_name):
         try:
             with self.get_cursor() as (cursor, conn):
-                sql = "SELECT id, pwd_hash FROM account WHERE username = %s"
+                sql = "SELECT id, pwd_hash, failed_attempts, locked_until FROM account WHERE username = %s"
                 cursor.execute(sql, (user_name,))
 
                 search_result = cursor.fetchone()
-                self.log(f"数据库查询成功")
+                self.log(f"账号查询成功")
                 return search_result
 
         except pymysql.err.OperationalError as e:
@@ -154,3 +154,17 @@ class DBServices:
             # 捕获其他未预料的数据库异常
             self.log(f"数据库未知错误: {e}")
             return False
+
+    def record_login_failure(self, user_id, new_attempts, locked_until):
+        """记录一次登录失败，必要时写入锁定时间"""
+        with self.get_cursor() as (cursor, conn):
+            sql = "UPDATE account SET failed_attempts = %s, locked_until = %s WHERE id = %s"
+            cursor.execute(sql, (new_attempts, locked_until, user_id))
+            self.log(f"登录失败计数更新成功")
+
+    def reset_login_failure(self, user_id):
+        """登录成功后清空失败计数和锁定时间"""
+        with self.get_cursor() as (cursor, conn):
+            sql = "UPDATE account SET failed_attempts = 0, locked_until = NULL WHERE id = %s"
+            cursor.execute(sql, (user_id,))
+            self.log(f"登录失败计数重置成功")
