@@ -21,7 +21,7 @@ app.add_middleware(
 
 # =========全局：服务启动一次性加载向量库，仅执行一次=========
 rag_service = RagServices()
-global_retriever = rag_service.load_vector_dataset()
+global_retriever = rag_service.load_public_vector_dataset()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 

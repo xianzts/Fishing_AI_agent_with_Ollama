@@ -6,7 +6,7 @@ import src.core.config
 
 
 def chat_interaction(rag, llm, account):
-    retriever = rag.load_vector_dataset()
+    retriever = rag.load_public_vector_dataset()
 
     print("---本地钓鱼AI Agent终端交互系统登录页面---")
     while True:

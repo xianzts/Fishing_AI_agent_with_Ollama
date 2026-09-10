@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, File, UploadFile
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import json
 import logging
+import tempfile, os, shutil
 
 from datetime import datetime, timedelta, timezone
 
@@ -16,14 +17,13 @@ from src.core import config
 
 logger = logging.getLogger(__name__)
 
-# =========全局：服务启动一次性加载向量库，仅执行一次=========
-rag_service = RagServices()
-global_retriever = rag_service.load_vector_dataset()
-
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 
 # 创建一个 router 实例
 router = APIRouter()
+
+# =========全局：只实例化服务，不加载具体 retriever=========
+rag_service = RagServices()
 
 
 @router.post("/login")
@@ -93,6 +93,9 @@ def rag_query(
     user_id = current_user["user_id"]
     user_name = current_user['username']
 
+    # 动态获取该用户的合并检索器（内部有缓存，不会每次都新建）
+    current_retriever = rag_service.get_combined_retriever(user_id)
+
     # SSE生成器闭包
     def sse_generator():
         try:
@@ -100,7 +103,7 @@ def rag_query(
                 LLM_instance.clear_history(user_id)
                 yield f"data: {json.dumps({'chunk': '所有历史对话记录删除完成'})}\n\n"
             else:
-                stream_iter = LLM_instance.stream_answer(user_id, user_name, question, global_retriever)
+                stream_iter = LLM_instance.stream_answer(user_id, user_name, question, current_retriever)
                 full_ai_response = ""  # 攒完整回答
                 for chunk in stream_iter:
                     content = chunk.content
@@ -123,3 +126,37 @@ def rag_query(
         "Connection": "keep-alive"
     }
     return StreamingResponse(sse_generator(), headers=headers)
+
+
+@router.post("/knowledge/upload")
+async def upload_knowledge(
+    files: list[UploadFile] = File(...),   # 接收多个文件
+    current_user=Depends(get_current_user)
+):
+    user_id = current_user["user_id"]
+
+    # 1. 校验所有文件后缀
+    for file in files:
+        suffix = os.path.splitext(file.filename)[1].lower()
+        if suffix not in (".pdf", ".docx", ".txt"):
+            raise HTTPException(status_code=400, detail=f"不支持的文件类型: {file.filename}")
+
+    # 2. 创建临时文件夹，把所有上传的文件保存进去
+    temp_dir = tempfile.mkdtemp()
+    try:
+        for file in files:
+            file_path = os.path.join(temp_dir, file.filename)
+            with open(file_path, "wb") as f:
+                f.write(await file.read())
+
+        # 3. 调用服务层统一处理整个文件夹
+        success, message, chunks = RagServices().add_private_document(user_id, temp_dir)
+
+    finally:
+        # 4. 无论如何，清空整个临时文件夹
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    if not success:
+        raise HTTPException(status_code=500, detail=message)
+
+    return {"message": message, "chunks": chunks}

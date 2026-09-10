@@ -154,25 +154,3 @@ class DBServices:
             # 捕获其他未预料的数据库异常
             self.log(f"数据库未知错误: {e}")
             return False
-
-    # 添加私有知识库到数据库
-    def add_private_doc(self, user_id, doc_name, doc_content):
-        try:
-            with self.get_cursor() as (cursor, conn):
-                sql = "INSERT INTO private_doc (user_id, doc_name, doc_content) VALUES (%s, %s, %s)"
-                cursor.execute(sql, (user_id, doc_name, doc_content))
-                self.log(f"添加文档成功")
-                return True
-
-        except pymysql.err.IntegrityError as e:
-            self.log(f"添加文档失败（唯一键冲突）: {e}")
-            return False
-
-        except pymysql.err.OperationalError as e:
-            self.log(f"添加文档失败: {e}")
-            return False
-
-        except pymysql.MySQLError as e:
-            # 捕获其他未预料的数据库异常
-            self.log(f"数据库未知错误: {e}")
-            return False

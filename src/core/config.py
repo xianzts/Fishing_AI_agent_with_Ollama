@@ -11,6 +11,8 @@ TEMP = 0.2
 BASE_DIR = Path(__file__).parent.parent.parent
 DOC_FOLDER = BASE_DIR / "assets" / "docs"  # 存放你的知识库文档目录
 PERSIST_DIR = BASE_DIR / "data" / "chroma_db"  # 向量库持久化保存的本地文件夹
+PUBLIC_COLLECTION_NAME = "public_knowledge"  # 公有数据库存储名
+USER_PREFIX = "user_"  # 私有库文件夹用户名前缀
 
 CHUNK_SIZE = 300  # 单块文本大小(中文汉字)
 CHUNK_OVERLAP = 50  # 块重叠，防止语义被切断

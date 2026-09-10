@@ -7,4 +7,4 @@ if __name__ == "__main__":
         format="%(asctime)s - %(levelname)s - %(message)s"
     )
     RagInstance = RagServices()
-    RagInstance.load_vector_dataset()
+    RagInstance.load_public_vector_dataset()

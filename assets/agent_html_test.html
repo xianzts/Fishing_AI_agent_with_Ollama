@@ -31,6 +31,60 @@
         .input-area { display: flex; gap: 10px; }
         .input-area input[type="text"] { flex: 1; }
         .status { margin-top: 10px; text-align: center; color: #7f8c8d; font-size: 13px; }
+        /* 聊天输入区（保持原样） */
+        .input-area {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px; /* 和上传区留出一点间距 */
+        }
+
+        /* 上传区容器：让内部元素靠右对齐 */
+        .upload-area {
+            display: flex;
+            justify-content: flex-end; /* 核心：靠右对齐 */
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* 自定义“选择文件”按钮 */
+        .file-label {
+            background: #ecf0f1;
+            color: #333;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            transition: background 0.3s;
+        }
+        .file-label:hover {
+            background: #dcdde1;
+        }
+
+        /* 显示选择的文件名 */
+        .file-name {
+            font-size: 13px;
+            color: #7f8c8d;
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* 上传按钮样式（可统一复用你原有的 button 样式） */
+        .upload-btn {
+            background: #3498db;
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        .upload-btn:hover {
+            background: #2980b9;
+        }
     </style>
 </head>
 <body>
@@ -62,6 +116,15 @@
                 <button id="send-btn" onclick="sendMessage()">发送</button>
             </div>
             <div id="status" class="status"></div>
+
+            <!-- 上传区 -->
+            <div class="upload-area">
+                <!-- 隐藏原生的文件选择框，用 label 自定义样式 -->
+                <input type="file" id="knowledge-files" multiple accept=".pdf,.docx,.txt" style="display: none;">
+                <label for="knowledge-files" class="file-label">选择文件</label>
+                <span id="file-name" class="file-name">未选择文件</span>
+                <button class="upload-btn" onclick="uploadKnowledge()">上传私有知识</button>
+            </div>
         </div>
     </div>
 
@@ -296,8 +359,48 @@
                 document.getElementById('send-btn').disabled = false;
             }
         }
+        async function uploadKnowledge() {
+            const input = document.getElementById('knowledge-files');
+            if (!input.files.length) return alert('请选择文件');
+
+            const formData = new FormData();
+            for (const file of input.files) {
+                formData.append('files', file);
+            }
+
+            const token = getToken();
+            try {
+                const response = await fetch(`${BASE_URL}/knowledge/upload`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: formData
+                });
+                const data = await response.json();
+                alert(data.message || '上传完成');
+            } catch (err) {
+                alert('上传失败：' + err.message);
+            } finally {
+                // 清空已选文件，无论成功与否
+                input.value = '';
+                document.getElementById('file-name').textContent = '未选择文件'; // 手动重置
+            }
+        }
 
         // ==================== 初始化 ====================
+        document.getElementById('knowledge-files').addEventListener('change', function() {
+            const fileNameSpan = document.getElementById('file-name');
+
+            if (this.files.length === 0) {
+                fileNameSpan.textContent = '未选择文件';
+            } else if (this.files.length === 1) {
+                // 如果只选了一个文件，显示文件名
+                fileNameSpan.textContent = this.files[0].name;
+            } else {
+                // 如果选了多个文件，显示文件数量
+                fileNameSpan.textContent = `已选择 ${this.files.length} 个文件`;
+            }
+        });
+
         window.addEventListener('DOMContentLoaded', () => {
             const token = getToken();
             if (token && !isTokenExpired(token)) {
