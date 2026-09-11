@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from src.core.exceptions import register_exception_handlers
 from src.api import api_routes
+from src.core.limiter import limiter
 
 app = FastAPI(title="Fishing agent")
 
@@ -12,6 +15,12 @@ app.add_middleware(
     allow_methods=["*"],         # 允许OPTIONS、POST等全部method
     allow_headers=["*"],
 )
+
+# 注册全局异常处理器
+register_exception_handlers(app)
+
+# ========== 注册限流器 ==========
+app.state.limiter = limiter
 
 # 注册路由
 app.include_router(api_routes.router)

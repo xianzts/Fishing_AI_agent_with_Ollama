@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, File, UploadFile
+from fastapi import Request, APIRouter, Depends, HTTPException, Response, File, UploadFile
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +13,7 @@ from src.services.llm_services import LLMServices
 from src.services.user_account import UserAccount
 
 from src.core.security import Security
+from src.core.limiter import limiter
 from src.core import config
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,8 @@ rag_service = RagServices()
 
 
 @router.post("/login")
-def login(form_data: OAuth2PasswordRequestForm = Depends()):
+@limiter.limit("5/minute;30/hour")
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
     """
     form_data.username 输入账号
     form_data.password 输入明文密码
@@ -91,7 +93,9 @@ def get_profile(current_user=Depends(get_current_user)):
 
 
 @router.post("/rag/chat")
+@limiter.limit("5/minute;30/hour")
 def rag_query(
+        request: Request,
         question: str,
         current_user=Depends(get_current_user)
 ):
@@ -136,7 +140,9 @@ def rag_query(
 
 
 @router.post("/knowledge/upload")
+@limiter.limit("5/minute;30/hour")
 async def upload_knowledge(
+    request: Request,
     files: list[UploadFile] = File(...),   # 接收多个文件
     current_user=Depends(get_current_user)
 ):
